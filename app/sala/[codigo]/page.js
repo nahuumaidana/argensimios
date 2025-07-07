@@ -1,76 +1,67 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@supabase/supabase-js'
 
-export default function Sala() {
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabase = createClient(supabaseUrl, supabaseKey)
+
+export default function SalaPage() {
   const { codigo } = useParams()
+  const [jugador, setJugador] = useState('')
   const [jugadores, setJugadores] = useState([])
-  const [nombreJugador, setNombreJugador] = useState('')
+  const [chat, setChat] = useState([])
   const [mensaje, setMensaje] = useState('')
-  const [mensajes, setMensajes] = useState([])
-  const [error, setError] = useState('')
-  const mensajesEndRef = useRef(null)
 
-  // Al cargar: leer jugador desde localStorage y cargar jugadores
   useEffect(() => {
-    const nombre = localStorage.getItem('nombreJugador')
-    if (!nombre) {
-      setError('No se encontró tu nombre. Volvé a crear o entrar a la sala.')
-      return
-    }
-    setNombreJugador(nombre)
+    const nombre = localStorage.getItem('nombre')
+    setJugador(nombre)
 
-    const obtenerJugadores = async () => {
-      const { data } = await supabase
+    const cargarJugadores = async () => {
+      const { data, error } = await supabase
         .from('jugadores')
         .select('*')
-        .eq('codigo_sala', codigo)
+        .eq('sala', codigo)
+
       if (data) setJugadores(data)
     }
 
-    const obtenerMensajes = async () => {
-      const { data } = await supabase
+    const cargarChat = async () => {
+      const { data, error } = await supabase
         .from('chat')
         .select('*')
-        .eq('codigo_sala', codigo)
+        .eq('sala', codigo)
         .order('created_at', { ascending: true })
-      if (data) setMensajes(data)
+
+      if (data) setChat(data)
     }
 
-    obtenerJugadores()
-    obtenerMensajes()
-  }, [codigo])
+    cargarJugadores()
+    cargarChat()
 
-  // Subscripciones en tiempo real a jugadores y chat
-  useEffect(() => {
     const canalJugadores = supabase
-      .channel(`jugadores-sala-${codigo}`)
+      .channel('jugadores')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'jugadores', filter: `codigo_sala=eq.${codigo}` },
+        { event: '*', schema: 'public', table: 'jugadores' },
         (payload) => {
-          supabase
-            .from('jugadores')
-            .select('*')
-            .eq('codigo_sala', codigo)
-            .then(({ data }) => setJugadores(data || []))
+          if (payload.new.sala === codigo) {
+            cargarJugadores()
+          }
         }
       )
       .subscribe()
 
     const canalChat = supabase
-      .channel(`chat-sala-${codigo}`)
+      .channel('chat')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'chat', filter: `codigo_sala=eq.${codigo}` },
+        { event: '*', schema: 'public', table: 'chat' },
         (payload) => {
-          supabase
-            .from('chat')
-            .select('*')
-            .eq('codigo_sala', codigo)
-            .order('created_at', { ascending: true })
-            .then(({ data }) => setMensajes(data || []))
+          if (payload.new.sala === codigo) {
+            setChat((prev) => [...prev, payload.new])
+          }
         }
       )
       .subscribe()
@@ -83,67 +74,92 @@ export default function Sala() {
 
   const enviarMensaje = async () => {
     if (mensaje.trim() === '') return
-    await supabase.from('chat').insert([
+
+    const { error } = await supabase.from('chat').insert([
       {
-        codigo_sala: codigo,
-        jugador: nombreJugador,
-        mensaje,
+        sala: codigo,
+        usuario: jugador,
+        mensaje: mensaje,
       },
     ])
-    setMensaje('')
+
+    if (!error) setMensaje('')
   }
 
-  // Scroll automático al nuevo mensaje
-  useEffect(() => {
-    mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensajes])
-
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
-      <h1 className="text-3xl font-bold text-orange-500 mb-2">Sala: {codigo}</h1>
-      <p className="mb-2">
-        <strong>Jugador:</strong> {nombreJugador}
-      </p>
-      <p className="mb-4 text-orange-400 font-semibold">Esperando jugadores...</p>
+    <main style={{ color: 'white', textAlign: 'center', padding: '20px' }}>
+      <h1 style={{ color: 'orange' }}>Sala: {codigo}</h1>
+      <h3>
+        <span style={{ fontWeight: 'bold' }}>Jugador:</span> {jugador}
+      </h3>
+      <h3 style={{ color: 'orange' }}>Esperando jugadores...</h3>
 
-      <div className="bg-gray-800 rounded-lg p-4 w-full max-w-2xl mb-6">
-        <p className="text-sm font-semibold mb-2">Jugadores conectados:</p>
-        <ul className="list-disc ml-6">
+      <div
+        style={{
+          margin: '10px auto',
+          backgroundColor: '#1c2833',
+          borderRadius: '10px',
+          padding: '10px',
+          width: '80%',
+          maxWidth: '600px',
+        }}
+      >
+        <h4 style={{ textAlign: 'left', color: 'white' }}>Jugadores conectados:</h4>
+        <ul style={{ listStyle: 'none', padding: 0, textAlign: 'left' }}>
           {jugadores.map((j) => (
-            <li key={j.id}>{j.nombre}</li>
+            <li key={j.id} style={{ color: 'lightgreen' }}>
+              {j.nombre}
+            </li>
           ))}
         </ul>
       </div>
 
-      {/* CHAT */}
-      <div className="w-full max-w-2xl bg-[#0d1320] rounded-lg mb-4 flex flex-col" style={{ height: '300px' }}>
-        <div className="flex-1 overflow-y-auto p-3">
-          {mensajes.map((msg) => (
-            <div key={msg.id} className="mb-2">
-              <strong className="text-orange-500">{msg.jugador}:</strong> {msg.mensaje}
-            </div>
+      <div
+        style={{
+          backgroundColor: '#0b1622',
+          borderRadius: '10px',
+          padding: '10px',
+          marginTop: '10px',
+          width: '80%',
+          maxWidth: '600px',
+        }}
+      >
+        <div style={{ maxHeight: '300px', overflowY: 'auto', textAlign: 'left' }}>
+          {chat.map((c, i) => (
+            <p key={i}>
+              <strong>{c.usuario}:</strong> {c.mensaje}
+            </p>
           ))}
-          <div ref={mensajesEndRef} />
         </div>
-        <div className="flex border-t border-gray-700">
+        <div style={{ display: 'flex', marginTop: '10px' }}>
           <input
             type="text"
             placeholder="Escribí un mensaje..."
-            className="flex-1 p-3 bg-gray-800 text-white"
             value={mensaje}
             onChange={(e) => setMensaje(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && enviarMensaje()}
+            style={{
+              flex: 1,
+              padding: '8px',
+              border: 'none',
+              borderRadius: '5px 0 0 5px',
+              backgroundColor: '#1c2833',
+              color: 'white',
+            }}
           />
           <button
-            className="bg-orange-600 hover:bg-orange-700 text-white px-4"
             onClick={enviarMensaje}
+            style={{
+              backgroundColor: 'orange',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '0 5px 5px 0',
+              fontWeight: 'bold',
+            }}
           >
             Enviar
           </button>
         </div>
       </div>
-
-      {error && <p className="text-red-500 mt-4">{error}</p>}
-    </div>
+    </main>
   )
 }
