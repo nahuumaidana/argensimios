@@ -43,7 +43,6 @@ export default function Sala() {
   const [mensajes, setMensajes] = useState([]);
   const [mensajeNuevo, setMensajeNuevo] = useState('');
   const [seleccion, setSeleccion] = useState('');
-
   useEffect(() => {
     if (!nombreJugador) return;
 
@@ -175,7 +174,6 @@ export default function Sala() {
       supabase.removeChannel(canal);
     };
   }, [codigo]);
-
   const elegirGanadora = async (ganadora) => {
     const jugadorGanador = cartasJugadas.find(j => j.carta === ganadora)?.jugador;
     if (!jugadorGanador) return;
@@ -232,6 +230,7 @@ export default function Sala() {
     await supabase.from('jugadas').delete().eq('sala', codigo);
     setSeleccion('');
   };
+
   return (
     <main className="min-h-screen bg-black text-white p-4 flex flex-col items-center">
       <h1 className="text-3xl font-bold text-orange-500 mb-4">Sala: {codigo}</h1>
@@ -263,7 +262,7 @@ export default function Sala() {
         <>
           <h3 className="text-xl text-orange-400 mb-2">Ronda {ronda} / {rondaMax}</h3>
           <p className="mb-1">Juez actual: <strong className="text-orange-300">{juez}</strong></p>
-          <p className="mb-4 text-center text-lg bg-gray-800 p-3 rounded-xl">{cartaNegra}</p>
+          <p className="mb-4 text-center text-lg bg-orange-600 text-black p-3 rounded-xl">{cartaNegra}</p>
 
           {nombreJugador === juez ? (
             <>
@@ -306,21 +305,6 @@ export default function Sala() {
           <h2 className="text-3xl text-green-400 font-bold">¡Ganó {ganadorFinal}!</h2>
         </div>
       )}
-
-      {/* Puntajes */}
-      <div className="mt-8 w-full max-w-md">
-        <h3 className="text-lg font-semibold text-orange-300 mb-2">Puntajes</h3>
-        <ul className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-          {Object.entries(puntajes)
-            .sort((a, b) => b[1] - a[1])
-            .map(([jugador, puntos]) => (
-              <li key={jugador} className="flex justify-between">
-                <span>{jugador}</span>
-                <span>{puntos}</span>
-              </li>
-            ))}
-        </ul>
-      </div>
 
       {/* Chat */}
       <div className="w-full max-w-2xl mt-10 bg-gray-900 border border-gray-700 rounded-lg shadow-md">
